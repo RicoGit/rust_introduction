@@ -13,7 +13,7 @@ fn main() {
     let args = std::env::args();
     println!("Args: {:?}", args);
 
-    basics::more_examples();
-    basics::traits_structs_enums();
-    basics::ownership_borrowing();
+    // basics::more_examples();
+    // basics::ownership_borrowing();
+    // basics::traits_structs_enums();
 }

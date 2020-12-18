@@ -10,11 +10,13 @@
 use std::cell::{Cell, RefCell};
 use std::collections::hash_map::RandomState;
 use std::collections::HashMap;
+use std::convert::TryInto;
 use std::fmt;
 use std::fmt::{Debug, Display, Formatter};
 use std::hash::BuildHasher;
 use std::iter::FromIterator;
 use std::ops::Range;
+use std::str::Bytes;
 
 // Primitives
 
@@ -31,7 +33,7 @@ pub fn echo(y: i32) -> i32 {
     let x = 42; // val
     let mut res = 0; // var
     res = x + y;
-    return res;
+    res
 }
 
 // Not allowed!
@@ -39,7 +41,7 @@ pub fn echo(y: i32) -> i32 {
 // let x = 1;
 // foo(new String("bar"));
 
-// Constant is allowed
+/// Constant is allowed
 const APP_ID: &str = "131343848";
 
 /// Pure function
@@ -76,6 +78,11 @@ pub fn more_examples() {
     let yy: i64 = x.into(); // cast 2
     let yyy: i64 = i64::from(x); // cast 3
 
+    // let slice = &y.to_le_bytes()[..4];
+    // let int_bytes: [u8;4]  = slice.try_into().expect("Can't convert to 4 len array");
+    // let res = i32::from_le_bytes(int_bytes);
+    // println!("From long {}", res);
+
     //
     // Unsafe
     //
@@ -85,7 +92,7 @@ pub fn more_examples() {
         // let byte: i8 = std::mem::transmute(true);
 
         let int: [i32; 2] = std::mem::transmute(y);
-        println!("i32 {:?}", int);
+        println!("i32 {:?}", int[0]);
 
         boom()
     }
@@ -138,6 +145,10 @@ pub fn more_examples() {
     let str = tuple.1;
     let boolean = tuple.2;
 
+    fn tuple_destruction((x, y): (i32, i64)) {
+        println!("tuple_destruction {}", x);
+    }
+
     //
     // Control flow
     //
@@ -172,6 +183,84 @@ pub fn more_examples() {
     map.insert(2, "2");
 }
 
+/// * Each value in Rust has a variable that’s called its owner.
+/// * There can only be one owner at a time.
+/// * When the owner goes out of scope, the value will be dropped.
+pub fn ownership_borrowing() {
+    //
+    // Ownership and move semantic
+    //
+
+    let str = String::from("!");
+
+    {
+        let int = 32;
+    } // here we destroy `y`
+
+    // let z = 10 + int; // cannot find value `y` in this scope
+
+    fn test(string: String) {
+        string.to_lowercase();
+    } // string get destroyed here
+
+    test(str); // moved to function
+
+    // println!("{}", str); // use after move
+
+    // https://doc.rust-lang.org/book/ch04-01-what-is-ownership.html#ways-variables-and-data-interact-move
+
+    // primitives have copy semantic
+
+    let x = 12;
+    fn copy_int(x: i32) {}
+    copy_int(x);
+    println!("{}", x);
+
+    let str = String::new();
+
+    fn test2(x: String) -> String {
+        // do something then take back
+        x
+    }
+
+    let str = test2(str); // moved to function
+
+    println!("{}", str); // ok
+
+    //
+    // Borrowing
+    //
+
+    let str = String::new();
+    let str1 = &str;
+    let str2 = &str;
+
+    fn test_by_ref(x: &String) {}
+
+    test_by_ref(str1);
+    test_by_ref(str2);
+    test_by_ref(&str);
+
+    println!("i32: {}", str);
+
+    let mut str_mut = String::from("mut string");
+
+    fn test_by_ref_mut(x: &mut String) {
+        x.push('!');
+    }
+    test_by_ref_mut(&mut str_mut);
+
+    println!("Changed str {}", str_mut);
+
+    // read write lock in types - no more data races !!! )))
+
+
+    //
+    // Lifetimes
+    //
+    // https://doc.rust-lang.org/book/ch10-03-lifetime-syntax.html
+}
+
 pub fn traits_structs_enums() {
     //
     // Structs
@@ -194,6 +283,10 @@ pub fn traits_structs_enums() {
     let User { name, age } = user;
 
     let user = User { name, age };
+
+    fn struct_destruction(User { name, age }: User) {
+        println!("struct_destruction {}, {}", name, age);
+    }
 
     impl User {
         const ZERO: usize = 21;
@@ -221,6 +314,9 @@ pub fn traits_structs_enums() {
             &self.name
         }
     }
+
+    user.to_name();
+    User::to_name(&user);
 
     //
     // Traits
@@ -294,6 +390,22 @@ pub fn traits_structs_enums() {
         B: ToString + Clone + AgeGetterSetter,
     {
         todo!()
+    }
+
+    //
+    // Associative types
+    //
+
+    trait Iterator {
+        type Item;
+        fn next(&mut self) -> Option<Self::Item>;
+    }
+
+    impl Iterator for Unit {
+        type Item = ();
+        fn next(&mut self) -> Option<Self::Item> {
+            None
+        }
     }
 
     fn impl_trait() -> impl AgeSetter {
@@ -388,33 +500,23 @@ pub fn traits_structs_enums() {
     println!("Metric after: {:?}", metric);
 }
 
-/// * Each value in Rust has a variable that’s called its owner.
-/// * There can only be one owner at a time.
-/// * When the owner goes out of scope, the value will be dropped.
-pub fn ownership_borrowing() {
-    struct Unit;
+pub fn function_closures() {
+    //
+    // Closures
+    //
+    // https://cheats.rs/#closures-in-apis
 
-    let x = 32;
+    let mut vec = vec![1, 2, 3];
 
-    {
-        let y = 32;
-    } // here we destroy `y`
+    // function, just a pointer
+    let func: fn(i32) -> i32 = |x: i32| x;
 
-    // let z = x + y; // cannot find value `y` in this scope
+    let clojure: &dyn Fn(i32) -> bool = &|x: i32| *{ &vec.is_empty() };
 
-    fn test(x: i32) {}
+    let clojure_once: &dyn FnMut(i32) -> () = &|x: i32| {
+        &mut vec.push(1);
+        ()
+    };
 
-    test(x);
-
-    println!("i32: {}", x);
-
-    fn test_unit(unit: Unit) {}
-
-    let unit = Unit;
-
-    test_unit(unit);
-
-    // println!("unit: {}", unit); // function takes ownership
-
-    // todo finish !!
+    let clojure_mut: &dyn FnOnce(i32) -> () = &|x: i32| drop(vec);
 }
